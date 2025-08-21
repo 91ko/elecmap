@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한국 지도</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+                 .controls {
+             position: absolute;
+             top: 10px;
+             left: 10px;
+             z-index: 1000;
+             background: white;
+             padding: 10px;
+             border-radius: 5px;
+             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+         }
+         .info-panel {
+             position: absolute;
+             top: 10px;
+             right: 10px;
+             z-index: 1000;
+             background: white;
+             padding: 15px;
+             border-radius: 8px;
+             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+             min-width: 250px;
+             max-width: 300px;
+             display: none;
+         }
+         .search-panel {
+             position: absolute;
+             top: 10px;
+             left: 50%;
+             transform: translateX(-50%);
+             z-index: 1000;
+             background: white;
+             padding: 15px;
+             border-radius: 8px;
+             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+             min-width: 300px;
+             max-width: 400px;
+         }
+         .search-input {
+             width: 100%;
+             padding: 8px;
+             margin: 5px 0;
+             border: 1px solid #ddd;
+             border-radius: 4px;
+             font-size: 14px;
+         }
+         .search-button {
+             background: #28a745;
+             color: white;
+             border: none;
+             padding: 8px 15px;
+             border-radius: 4px;
+             cursor: pointer;
+             margin: 5px;
+             font-size: 14px;
+         }
+         .search-button:hover {
+             background: #218838;
+         }
+         .search-tabs {
+             display: flex;
+             margin-bottom: 10px;
+         }
+         .search-tab {
+             flex: 1;
+             padding: 8px;
+             text-align: center;
+             background: #f8f9fa;
+             border: 1px solid #ddd;
+             cursor: pointer;
+             font-size: 12px;
+         }
+         .search-tab.active {
+             background: #007cba;
+             color: white;
+             border-color: #007cba;
+         }
+         .search-tab:first-child {
+             border-radius: 4px 0 0 4px;
+         }
+                   .search-tab:last-child {
+              border-radius: 0 4px 4px 0;
+          }
+          .region-selector {
+              margin-bottom: 10px;
+          }
+          .region-select {
+              width: 100%;
+              padding: 8px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              font-size: 14px;
+              background: white;
+          }
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            background: #007cba;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a87;
+        }
+    </style>
+</head>
+<body>
+             <div class="controls">
+             <button onclick="toggleGrid()">격자 표시/숨김</button>
+             <button onclick="clearGrid()">격자 지우기</button>
+             <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                 <strong>사용법:</strong><br>
+                 • 지도를 클릭하면 해당 위치의<br>
+                 • 50m 격자와 전산화 번호가 표시됩니다
+             </div>
+         </div>
+                   <div id="infoPanel" class="info-panel">
+              <h3 style="margin: 0 0 10px 0; color: #333;">전산화 번호</h3>
+              <div id="gridCode" style="font-family: monospace; font-size: 18px; font-weight: bold; color: #007cba; margin-bottom: 10px;">
+                  클릭하여 확인하세요
+              </div>
+              <div id="gridDetails" style="font-size: 12px; color: #666;">
+                  <div><strong>2km 격자:</strong> <span id="nnnn">-</span></div>
+                  <div><strong>500m 블록:</strong> <span id="l">-</span></div>
+                  <div><strong>50m 격자:</strong> <span id="xy">-</span></div>
+                  <div><strong>보정값:</strong> <span id="d">-</span></div>
+                  <div><strong>위도:</strong> <span id="lat">-</span></div>
+                  <div><strong>경도:</strong> <span id="lon">-</span></div>
+              </div>
+          </div>
+                     <div id="searchPanel" class="search-panel">
+               <div class="search-tabs">
+                   <div class="search-tab active" onclick="switchSearchTab('code')">전산화 번호</div>
+                   <div class="search-tab" onclick="switchSearchTab('coordinate')">좌표</div>
+               </div>
+               <div class="region-selector">
+                   <select id="regionSelect" class="region-select" onchange="changeRegion()">
+                       <option value="auto">권역 자동 선택</option>
+                       <option value="중부권">중부권</option>
+                       <option value="강원권">강원권</option>
+                       <option value="호남(상)">호남(상)</option>
+                       <option value="호남(하)">호남(하)</option>
+                       <option value="영남(상)">영남(상)</option>
+                       <option value="영남(하)">영남(하)</option>
+                       <option value="울릉권">울릉권</option>
+                       <option value="제주권">제주권</option>
+                   </select>
+               </div>
+               <div id="codeSearch" class="search-content">
+                   <input type="text" id="codeInput" class="search-input" placeholder="전산화 번호 입력 (예: 5690W645)" maxlength="8">
+                   <button class="search-button" onclick="searchByCode()">검색</button>
+               </div>
+               <div id="coordinateSearch" class="search-content" style="display: none;">
+                   <input type="number" id="latInput" class="search-input" placeholder="위도 (예: 37.5665)" step="0.000001">
+                   <input type="number" id="lonInput" class="search-input" placeholder="경도 (예: 126.9780)" step="0.000001">
+                   <button class="search-button" onclick="searchByCoordinate()">검색</button>
+               </div>
+               <div id="searchResult" style="margin-top: 10px; font-size: 12px; color: #666; display: none;">
+                   <div id="searchResultText"></div>
+               </div>
+           </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    <script>
+        // 한국 GIS 격자 시스템
+        class KoreanGISGrid {
+            constructor() {
+                this.map = null;
+                this.gridLayer = null;
+                this.isGridVisible = false;
+                
+                // 500m 블록 문자 매핑 (16개)
+                this.blockMapping = [
+                    ['A', 'B', 'E', 'F'],
+                    ['C', 'D', 'G', 'H'],
+                    ['P', 'Q', 'W', 'X'],
+                    ['R', 'S', 'Y', 'Z']
+                ];
+                
+                // EPSG 정의 (중부원점)
+                this.epsgDefinition = '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs';
+                
+                                 // 보정점들 (앵커 포인트) - 권역별로 분류
+                 this.anchorPointsByRegion = {
+                     '중부권': [
+                         { code: '0000A000', lat: 37.1064943, lon: 126.9898329 },
+                         { code: '8714Y961', lat: 37.3388204, lon: 126.7181615 },
+                         { code: '7629B341', lat: 37.629129, lon: 126.4532631 },
+                         { code: '3312Z911', lat: 37.3082256, lon: 127.7568066 },
+                         { code: '2920W591', lat: 37.4602486, lon: 127.659511 },
+                         { code: '0837C301', lat: 37.7686078, lon: 127.1730899 },
+                         { code: '3333A000', lat: 37.698274, lon: 127.7365727 },
+                         { code: '3011D201', lat: 37.2986809, lon: 127.6733011 },
+                         { code: '3112Y511', lat: 37.3075932, lon: 127.7033385 },
+                         { code: '9041C091', lat: 37.8453131, lon: 126.7625628 }
+                     ],
+                     '강원권': [
+                         { code: '0000A000', lat: 37.0989009, lon: 128.9937373 },
+                         { code: '6666A000', lat: 38.2934758, lon: 128.2122102 },
+                         { code: '0000A999', lat: 37.1100923, lon: 128.9954731 },
+                         { code: '9735C132', lat: 37.7563022, lon: 128.8990843 },
+                         { code: '8354H818', lat: 38.0784833, lon: 128.616075 }
+                     ],
+                     '호남(상)': [
+                         { code: '6875F971', lat: 36.6561492, lon: 126.2974475 },
+                         { code: '0000A000', lat: 35.3041084, lon: 126.9901101 },
+                         { code: '9999A000', lat: 37.0884511, lon: 126.9672545 }
+                     ],
+                     '호남(하)': [
+                         { code: '9999A000', lat: 35.2862005, lon: 126.9681528 },
+                         { code: '8800A000', lat: 33.5071585, lon: 126.7508456 },
+                         { code: '9500A000', lat: 33.501309, lon: 126.882842 },
+                         { code: '7560A999', lat: 34.5859699, lon: 126.4503164 }
+                     ],
+                     '영남(상)': [
+                         { code: '0009A000', lat: 37.2688532, lon: 128.9890286 },
+                         { code: '1111A000', lat: 37.2775154, lon: 129.247268 },
+                         { code: '6666A000', lat: 36.4911492, lon: 128.2307546 },
+                         { code: '9999A000', lat: 37.0888458, lon: 128.9678937 }
+                     ],
+                     '영남(하)': [
+                         { code: '0000A000', lat: 35.3040563, lon: 128.9898082 },
+                         { code: '1111A000', lat: 35.5021032, lon: 129.2322314 },
+                         { code: '1299A001', lat: 35.2861064, lon: 129.2539206 },
+                         { code: '6849B721', lat: 36.1863353, lon: 128.2876385 },
+                         { code: '9999A000', lat: 35.2854937, lon: 128.9687563 }
+                     ],
+                     '울릉권': [
+                         { code: '9251X051', lat: 37.4784218, lon: 130.8933145 },
+                         { code: '9221P142', lat: 37.4784218, lon: 130.8933145 }
+                     ],
+                     '제주권': [
+                         { code: '8011P999', lat: 33.2430123, lon: 126.566188 },
+                         { code: '6213B751', lat: 33.2845833, lon: 126.1837017 },
+                         { code: '7826R501', lat: 33.504744, lon: 126.519592 },
+                         { code: '9622B051', lat: 33.449454, lon: 126.9097603 }
+                     ]
+                 };
+                 
+                 // 모든 보정점을 하나의 배열로 통합
+                 this.anchorPoints = [];
+                 for (const region in this.anchorPointsByRegion) {
+                     this.anchorPoints.push(...this.anchorPointsByRegion[region]);
+                 }
+                 
+                 // 현재 선택된 권역
+                 this.selectedRegion = 'auto';
+                 
+                 // 기본 보정점 (중부권)
+                 this.anchorPoint = this.anchorPoints[0];
+                
+                this.init();
+            }
+            
+            init() {
+                this.initMap();
+                this.setupProj4();
+            }
+            
+                         initMap() {
+                 // 한국 중심으로 지도 초기화
+                 this.map = L.map('map').setView([36.5, 127.5], 7);
+                 
+                 // OpenStreetMap 타일 레이어 추가
+                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                     attribution: '© OpenStreetMap contributors'
+                 }).addTo(this.map);
+                 
+                 this.gridLayer = L.layerGroup(); // 격자 레이어를 지도에 추가하지 않음
+                 
+                 // 클릭 이벤트 추가
+                 this.map.on('click', (e) => {
+                     this.onMapClick(e);
+                 });
+             }
+            
+            setupProj4() {
+                // EPSG 정의 등록
+                proj4.defs('EPSG:5186', this.epsgDefinition);
+            }
+            
+            // 좌표 변환: WGS84 → TM
+            transformToTM(lat, lon) {
+                try {
+                    const [e, n] = proj4('EPSG:4326', 'EPSG:5186', [lon, lat]);
+                    return { e, n };
+                } catch (error) {
+                    console.error('좌표 변환 오류:', error);
+                    return null;
+                }
+            }
+            
+                         // 가장 가까운 보정점 찾기 (권역 선택 고려)
+             findNearestAnchor(lat, lon) {
+                 let anchorsToSearch = this.anchorPoints;
+                 
+                 // 특정 권역이 선택된 경우 해당 권역의 보정점만 사용
+                 if (this.selectedRegion !== 'auto' && this.anchorPointsByRegion[this.selectedRegion]) {
+                     anchorsToSearch = this.anchorPointsByRegion[this.selectedRegion];
+                 }
+                 
+                 let nearestAnchor = anchorsToSearch[0];
+                 let minDistance = Infinity;
+                 
+                 for (const anchor of anchorsToSearch) {
+                     const distance = Math.sqrt(
+                         Math.pow(lat - anchor.lat, 2) + Math.pow(lon - anchor.lon, 2)
+                     );
+                     if (distance < minDistance) {
+                         minDistance = distance;
+                         nearestAnchor = anchor;
+                     }
+                 }
+                 
+                 // 동일한 코드가 여러 권역에 있을 경우, 위도/경도 기반으로 가장 적절한 권역 선택
+                 if (this.selectedRegion === 'auto') {
+                     const targetRegion = this.getRegionInfo({ lat, lon });
+                     const regionAnchors = anchorsToSearch.filter(anchor => 
+                         this.getRegionInfo(anchor) === targetRegion
+                     );
+                     
+                     if (regionAnchors.length > 0) {
+                         // 해당 권역의 보정점 중에서 가장 가까운 것 선택
+                         let regionNearestAnchor = regionAnchors[0];
+                         let regionMinDistance = Infinity;
+                         
+                         for (const anchor of regionAnchors) {
+                             const distance = Math.sqrt(
+                                 Math.pow(lat - anchor.lat, 2) + Math.pow(lon - anchor.lon, 2)
+                             );
+                             if (distance < regionMinDistance) {
+                                 regionMinDistance = distance;
+                                 regionNearestAnchor = anchor;
+                             }
+                         }
+                         
+                         return regionNearestAnchor;
+                     }
+                 }
+                 
+                 return nearestAnchor;
+             }
+             
+             // 권역 변경
+             changeSelectedRegion(region) {
+                 this.selectedRegion = region;
+                 console.log(`권역이 ${region}으로 변경되었습니다.`);
+             }
+             
+             // 격자 코드 생성: 좌표 → 코드
+             generateGridCode(lat, lon) {
+                 const tm = this.transformToTM(lat, lon);
+                 if (!tm) return null;
+                 
+                 const { e, n } = tm;
+                 
+                 // 가장 가까운 보정점 찾기
+                 const nearestAnchor = this.findNearestAnchor(lat, lon);
+                 
+                 // 원점 계산 (보정점 기반)
+                 const anchorTM = this.transformToTM(nearestAnchor.lat, nearestAnchor.lon);
+                 if (!anchorTM) return null;
+                 
+                 // 2km 인덱스 계산
+                 const anchorCode = nearestAnchor.code;
+                 const anchorXX = parseInt(anchorCode.substring(0, 2));
+                 const anchorYY = parseInt(anchorCode.substring(2, 4));
+                 
+                 const e0 = anchorTM.e - 2000 * anchorXX;
+                 const n0 = anchorTM.n - 2000 * anchorYY;
+                 
+                 const ix2 = Math.floor((e - e0) / 2000);
+                 const iy2 = Math.floor((n - n0) / 2000);
+                 
+                 // 2km 인덱스를 00~99 범위로 제한 (순환)
+                 const ix2Limited = ((ix2 % 100) + 100) % 100; // 음수 처리 포함
+                 const iy2Limited = ((iy2 % 100) + 100) % 100; // 음수 처리 포함
+                 
+                 const nnnn = this.pad2(ix2Limited) + this.pad2(iy2Limited);
+                 
+                 // 2km 내부 오프셋
+                 const dE2 = e - (e0 + 2000 * ix2);
+                 const dN2 = n - (n0 + 2000 * iy2);
+                 
+                 // 500m 블록 문자
+                 const col4 = Math.floor(dE2 / 500);
+                 const row4South = Math.floor(dN2 / 500);
+                 const rowTop = 3 - row4South;
+                 
+                 if (rowTop < 0 || rowTop >= 4 || col4 < 0 || col4 >= 4) {
+                     return null;
+                 }
+                 
+                 const l = this.blockMapping[rowTop][col4];
+                 
+                 // 500m 내부 오프셋
+                 const dE5 = dE2 - 500 * col4;
+                 const dN5 = dN2 - 500 * row4South;
+                 
+                 // 50m 세부격자
+                 const x50 = Math.floor(dE5 / 50);
+                 const y50South = Math.floor(dN5 / 50);
+                 
+                 if (x50 < 0 || x50 >= 10 || y50South < 0 || y50South >= 10) {
+                     return null;
+                 }
+                 
+                 const xy = x50.toString() + y50South.toString();
+                 
+                 // 보정값 (임의로 5 설정)
+                 const d = '5';
+                 
+                 return nnnn + l + xy + d;
+             }
+            
+                         // 격자 생성 (2km + 500m 알파벳)
+             generateGrid() {
+                 this.gridLayer.clearLayers();
+                 
+                 const bounds = this.map.getBounds();
+                 const gridSize2km = 0.018; // 약 2km (위도/경도 단위)
+                 const gridSize500m = 0.0045; // 약 500m (위도/경도 단위)
+                 const zoom = this.map.getZoom();
+                 
+                 // 줌 레벨에 따라 격자 표시 제한
+                 if (zoom < 8) {
+                     return; // 너무 멀리서는 격자 표시 안함
+                 }
+                 
+                 // 2km 격자 범위 계산 (최대 10x10 격자로 제한)
+                 const startLat2km = Math.floor(bounds.getSouth() / gridSize2km) * gridSize2km;
+                 const endLat2km = Math.min(startLat2km + gridSize2km * 10, Math.ceil(bounds.getNorth() / gridSize2km) * gridSize2km);
+                 const startLon2km = Math.floor(bounds.getWest() / gridSize2km) * gridSize2km;
+                 const endLon2km = Math.min(startLon2km + gridSize2km * 10, Math.ceil(bounds.getEast() / gridSize2km) * gridSize2km);
+                 
+                 // 격자 생성 (배치 처리)
+                 const cells = [];
+                 const labels = [];
+                 
+                 // 2km 격자 생성
+                 for (let lat = startLat2km; lat < endLat2km; lat += gridSize2km) {
+                     for (let lon = startLon2km; lon < endLon2km; lon += gridSize2km) {
+                         const cellBounds2km = [
+                             [lat, lon],
+                             [lat + gridSize2km, lon + gridSize2km]
+                         ];
+                         
+                         // 2km 격자 코드 생성 (알파벳 부분만)
+                         const centerLat = lat + gridSize2km / 2;
+                         const centerLon = lon + gridSize2km / 2;
+                         const code2km = this.generateGridCode(centerLat, centerLon);
+                         
+                         if (code2km) {
+                             // 2km 격자 셀 생성 (굵은 선)
+                             const cell2km = L.rectangle(cellBounds2km, {
+                                 color: '#ff0000',
+                                 weight: 3,
+                                 fillOpacity: 0.1
+                             });
+                             
+                             // 2km 격자 라벨 생성 (NNNN 부분만)
+                             if (zoom >= 9) {
+                                 const nnnn = code2km.substring(0, 4);
+                                 const label2km = L.divIcon({
+                                     className: 'grid-label',
+                                     html: `<div style="background: white; padding: 2px 4px; border-radius: 3px; font-size: 12px; font-weight: bold; color: #ff0000;">${nnnn}</div>`,
+                                     iconSize: [60, 20]
+                                 });
+                                 
+                                 const labelMarker2km = L.marker([centerLat, centerLon], { icon: label2km });
+                                 labels.push(labelMarker2km);
+                             }
+                             
+                             cells.push(cell2km);
+                             
+                                                           // 2km 격자 안에 500m 격자 생성 (매핑 규칙에 따라)
+                              for (let row = 0; row < 4; row++) {
+                                  for (let col = 0; col < 4; col++) {
+                                      // 매핑 규칙: 북→남, 서→동 순서
+                                      const subLat = lat + (3 - row) * gridSize500m; // 북쪽이 0행
+                                      const subLon = lon + col * gridSize500m; // 서쪽이 0열
+                                      const subCellBounds = [
+                                          [subLat, subLon],
+                                          [subLat + gridSize500m, subLon + gridSize500m]
+                                      ];
+                                      
+                                      // 매핑 규칙에 따라 직접 알파벳 할당
+                                      const l = this.blockMapping[row][col];
+                                      
+                                      // 500m 격자 셀 생성 (얇은 선)
+                                      const subCell = L.rectangle(subCellBounds, {
+                                          color: '#0066cc',
+                                          weight: 1,
+                                          fillOpacity: 0.05
+                                      });
+                                      
+                                      // 500m 격자 라벨 생성 (알파벳 부분만)
+                                      if (zoom >= 9) {
+                                          const subLabel = L.divIcon({
+                                              className: 'grid-label',
+                                              html: `<div style="background: rgba(255,255,255,0.9); padding: 2px 4px; border-radius: 3px; font-size: 14px; font-weight: bold; color: #0066cc; border: 1px solid #0066cc;">${l}</div>`,
+                                              iconSize: [25, 20]
+                                          });
+                                          
+                                          const subCenterLat = subLat + gridSize500m / 2;
+                                          const subCenterLon = subLon + gridSize500m / 2;
+                                          const subLabelMarker = L.marker([subCenterLat, subCenterLon], { icon: subLabel });
+                                          labels.push(subLabelMarker);
+                                      }
+                                      
+                                      cells.push(subCell);
+                                      
+                                      // 500m 격자 안에 50m 격자 생성 (10x10 = 100칸, 00~99)
+                                      const gridSize50m = 0.00045; // 약 50m (위도/경도 단위)
+                                      for (let i = 0; i < 10; i++) {
+                                          for (let j = 0; j < 10; j++) {
+                                              const microLat = subLat + (9 - i) * gridSize50m; // 북쪽이 0행
+                                              const microLon = subLon + j * gridSize50m; // 서쪽이 0열
+                                              const microCellBounds = [
+                                                  [microLat, microLon],
+                                                  [microLat + gridSize50m, microLon + gridSize50m]
+                                              ];
+                                              
+                                              // 50m 격자 셀 생성 (매우 얇은 선)
+                                              const microCell = L.rectangle(microCellBounds, {
+                                                  color: '#00aa00',
+                                                  weight: 0.5,
+                                                  fillOpacity: 0.02
+                                              });
+                                              
+                                              // 50m 격자 라벨 생성 (00~99)
+                                              if (zoom >= 11) {
+                                                  const xy = this.pad2(j) + this.pad2(i); // X=열, Y=행
+                                                  const microLabel = L.divIcon({
+                                                      className: 'grid-label',
+                                                      html: `<div style="background: rgba(255,255,255,0.8); padding: 1px 2px; border-radius: 2px; font-size: 8px; font-weight: bold; color: #00aa00;">${xy}</div>`,
+                                                      iconSize: [20, 12]
+                                                  });
+                                                  
+                                                  const microCenterLat = microLat + gridSize50m / 2;
+                                                  const microCenterLon = microLon + gridSize50m / 2;
+                                                  const microLabelMarker = L.marker([microCenterLat, microCenterLon], { icon: microLabel });
+                                                  labels.push(microLabelMarker);
+                                              }
+                                              
+                                              cells.push(microCell);
+                                          }
+                                      }
+                                  }
+                              }
+                         }
+                     }
+                 }
+                 
+                 // 배치로 한번에 추가
+                 cells.forEach(cell => this.gridLayer.addLayer(cell));
+                 labels.forEach(label => this.gridLayer.addLayer(label));
+             }
+            
+                         // 격자 표시/숨김
+             toggleGrid() {
+                 this.isGridVisible = !this.isGridVisible;
+                 
+                 if (this.isGridVisible) {
+                     this.map.addLayer(this.gridLayer); // 격자 레이어를 지도에 추가
+                     // 지연 로딩으로 성능 향상
+                     setTimeout(() => {
+                         this.generateGrid();
+                     }, 100);
+                 } else {
+                     this.gridLayer.clearLayers();
+                     this.map.removeLayer(this.gridLayer); // 격자 레이어를 지도에서 제거
+                 }
+             }
+            
+                         // 격자 지우기
+             clearGrid() {
+                 this.gridLayer.clearLayers();
+                 this.map.removeLayer(this.gridLayer); // 격자 레이어를 지도에서 제거
+                 this.isGridVisible = false;
+                 
+                 // 클릭 관련 요소들도 제거
+                 if (this.clickMarker) {
+                     this.map.removeLayer(this.clickMarker);
+                     this.clickMarker = null;
+                 }
+                 if (this.highlightLayer) {
+                     this.map.removeLayer(this.highlightLayer);
+                     this.highlightLayer = null;
+                 }
+                 
+                 // 정보 패널 숨기기
+                 document.getElementById('infoPanel').style.display = 'none';
+             }
+            
+                         // 지도 클릭 이벤트 처리
+             onMapClick(e) {
+                 const lat = e.latlng.lat;
+                 const lon = e.latlng.lng;
+                 
+                 // 격자 코드 생성
+                 const code = this.generateGridCode(lat, lon);
+                 
+                 if (code) {
+                     // 기존 마커 제거
+                     if (this.clickMarker) {
+                         this.map.removeLayer(this.clickMarker);
+                     }
+                     
+                     // 클릭한 위치에 마커 추가
+                     this.clickMarker = L.marker([lat, lon], {
+                         icon: L.divIcon({
+                             className: 'click-marker',
+                             html: `<div style="background: #ff0000; color: white; padding: 5px 8px; border-radius: 5px; font-weight: bold; font-size: 12px;">${code}</div>`,
+                             iconSize: [120, 30]
+                         })
+                     }).addTo(this.map);
+                     
+                     // 50m 격자 하이라이트
+                     this.highlight50mGrid(lat, lon);
+                     
+                     // 정보 표시
+                     this.showGridInfo(code, lat, lon);
+                 }
+             }
+             
+             // 50m 격자 하이라이트
+             highlight50mGrid(lat, lon) {
+                 // 기존 하이라이트 제거
+                 if (this.highlightLayer) {
+                     this.map.removeLayer(this.highlightLayer);
+                 }
+                 
+                 this.highlightLayer = L.layerGroup();
+                 
+                 // 50m 격자 크기 계산
+                 const gridSize50m = 0.00045;
+                 
+                 // 클릭한 위치가 속한 50m 격자 찾기
+                 const gridLat = Math.floor(lat / gridSize50m) * gridSize50m;
+                 const gridLon = Math.floor(lon / gridSize50m) * gridSize50m;
+                 
+                 // 50m 격자 하이라이트
+                 const highlightCell = L.rectangle([
+                     [gridLat, gridLon],
+                     [gridLat + gridSize50m, gridLon + gridSize50m]
+                 ], {
+                     color: '#ff0000',
+                     weight: 3,
+                     fillColor: '#ff0000',
+                     fillOpacity: 0.3
+                 });
+                 
+                 this.highlightLayer.addLayer(highlightCell);
+                 this.map.addLayer(this.highlightLayer);
+             }
+             
+             // 격자 정보 표시
+             showGridInfo(code, lat, lon) {
+                 const nnnn = code.substring(0, 4);
+                 const l = code.substring(4, 5);
+                 const xy = code.substring(5, 7);
+                 const d = code.substring(7, 8);
+                 
+                 // 가장 가까운 보정점 찾기
+                 const nearestAnchor = this.findNearestAnchor(lat, lon);
+                 
+                 // HTML 요소 업데이트
+                 document.getElementById('gridCode').textContent = code;
+                 document.getElementById('nnnn').textContent = nnnn;
+                 document.getElementById('l').textContent = l;
+                 document.getElementById('xy').textContent = xy;
+                 document.getElementById('d').textContent = d;
+                 document.getElementById('lat').textContent = lat.toFixed(6);
+                 document.getElementById('lon').textContent = lon.toFixed(6);
+                 
+                                   // 보정점 정보 추가 (위도/경도 기반 권역 판단)
+                  const regionInfo = this.getRegionInfo(nearestAnchor);
+                  
+                  // 정보 패널에 보정점 정보 추가
+                  const infoPanel = document.getElementById('infoPanel');
+                  const regionDiv = infoPanel.querySelector('#regionInfo') || 
+                      (() => {
+                          const div = document.createElement('div');
+                          div.id = 'regionInfo';
+                          div.style.fontSize = '11px';
+                          div.style.color = '#888';
+                          div.style.marginTop = '8px';
+                          div.style.paddingTop = '8px';
+                          div.style.borderTop = '1px solid #eee';
+                          infoPanel.appendChild(div);
+                          return div;
+                      })();
+                  
+                  regionDiv.innerHTML = `
+                      <div><strong>사용 보정점:</strong> ${nearestAnchor.code}</div>
+                      <div><strong>보정점 권역:</strong> ${regionInfo} (위도: ${nearestAnchor.lat.toFixed(6)}, 경도: ${nearestAnchor.lon.toFixed(6)})</div>
+                      <div><strong>보정점 좌표:</strong> ${nearestAnchor.lat.toFixed(6)}, ${nearestAnchor.lon.toFixed(6)}</div>
+                  `;
+                 
+                 // 정보 패널 표시
+                 document.getElementById('infoPanel').style.display = 'block';
+             }
+             
+             // 지역 정보 반환 (위도/경도 범위 기반)
+             getRegionInfo(anchor) {
+                 const lat = anchor.lat;
+                 const lon = anchor.lon;
+                 
+                 // 울릉도 (가장 동쪽, 특별한 경우)
+                 if (lon >= 130.0) return '울릉권';
+                 
+                 // 제주도 (가장 남쪽)
+                 if (lat < 34.0) return '제주권';
+                 
+                 // 강원도 (가장 북동쪽)
+                 if (lat >= 37.5 && lon >= 128.5) return '강원권';
+                 
+                 // 영남(상) - 경북 지역
+                 if (lat >= 36.5 && lon >= 128.5) return '영남(상)';
+                 
+                 // 영남(하) - 경남 지역  
+                 if (lat >= 35.0 && lon >= 128.5) return '영남(하)';
+                 
+                 // 호남(하) - 전남 지역
+                 if (lat >= 35.0 && lon >= 126.5 && lon < 128.5) return '호남(하)';
+                 
+                 // 호남(상) - 전북 지역
+                 if (lat >= 35.0 && lon < 126.5) return '호남(상)';
+                 
+                 // 중부권 (서울, 경기, 인천, 충청도) - 기본값
+                 return '중부권';
+             }
+             
+             // 숫자 패딩 (2자리)
+             pad2(num) {
+                 return num.toString().padStart(2, '0');
+             }
+             
+             // 전산화 번호로 좌표 찾기 (코드 → 좌표)
+             findCoordinateFromCode(code) {
+                 if (!code || code.length !== 8) {
+                     return null;
+                 }
+                 
+                 const nnnn = code.substring(0, 4);
+                 const l = code.substring(4, 5);
+                 const xy = code.substring(5, 7);
+                 const d = code.substring(7, 8);
+                 
+                 // 2km 인덱스 추출
+                 const xx = parseInt(nnnn.substring(0, 2));
+                 const yy = parseInt(nnnn.substring(2, 4));
+                 
+                 // 500m 블록 인덱스 찾기
+                 let rowTop = -1, col4 = -1;
+                 for (let row = 0; row < 4; row++) {
+                     for (let col = 0; col < 4; col++) {
+                         if (this.blockMapping[row][col] === l) {
+                             rowTop = row;
+                             col4 = col;
+                             break;
+                         }
+                     }
+                     if (rowTop !== -1) break;
+                 }
+                 
+                 if (rowTop === -1 || col4 === -1) {
+                     return null;
+                 }
+                 
+                 // 50m 인덱스 추출
+                 const x50 = parseInt(xy.substring(0, 1));
+                 const y50 = parseInt(xy.substring(1, 2));
+                 
+                 // 선택된 권역의 보정점 사용
+                 let anchorsToSearch = this.anchorPoints;
+                 if (this.selectedRegion !== 'auto' && this.anchorPointsByRegion[this.selectedRegion]) {
+                     anchorsToSearch = this.anchorPointsByRegion[this.selectedRegion];
+                 }
+                 
+                 // 첫 번째 보정점 사용 (또는 더 정교한 로직으로 개선 가능)
+                 const anchor = anchorsToSearch[0];
+                 const anchorTM = this.transformToTM(anchor.lat, anchor.lon);
+                 if (!anchorTM) return null;
+                 
+                 const anchorCode = anchor.code;
+                 const anchorXX = parseInt(anchorCode.substring(0, 2));
+                 const anchorYY = parseInt(anchorCode.substring(2, 4)); // 수정: 2-4 인덱스
+                 
+                 const e0 = anchorTM.e - 2000 * anchorXX;
+                 const n0 = anchorTM.n - 2000 * anchorYY;
+                 
+                 // 2km 시작점
+                 const e2 = e0 + 2000 * xx;
+                 const n2 = n0 + 2000 * yy;
+                 
+                 // 500m 블록 오프셋
+                 const row4South = 3 - rowTop;
+                 const e5 = e2 + 500 * col4;
+                 const n5 = n2 + 500 * row4South;
+                 
+                 // 50m 칸 중심 (보정 d는 무시하고 중앙 가정)
+                 const eCenter = e5 + (x50 + 0.5) * 50;
+                 const nCenter = n5 + (y50 + 0.5) * 50;
+                 
+                 // TM → WGS84 역변환
+                 try {
+                     const [lon, lat] = proj4('EPSG:5186', 'EPSG:4326', [eCenter, nCenter]);
+                     return { lat, lon };
+                 } catch (error) {
+                     console.error('좌표 역변환 오류:', error);
+                     return null;
+                 }
+             }
+             
+             // 검색 결과를 지도에 표시
+             showSearchResult(lat, lon, code = null) {
+                 // 기존 검색 마커 제거
+                 if (this.searchMarker) {
+                     this.map.removeLayer(this.searchMarker);
+                 }
+                 
+                 // 검색 결과 마커 추가
+                 this.searchMarker = L.marker([lat, lon], {
+                     icon: L.divIcon({
+                         className: 'search-marker',
+                         html: `<div style="background: #28a745; color: white; padding: 5px 8px; border-radius: 5px; font-weight: bold; font-size: 12px;">${code || '검색결과'}</div>`,
+                         iconSize: [120, 30]
+                     })
+                 }).addTo(this.map);
+                 
+                 // 지도 중심 이동
+                 this.map.setView([lat, lon], 15);
+                 
+                 // 50m 격자 하이라이트
+                 this.highlight50mGrid(lat, lon);
+                 
+                 // 격자 코드 생성 및 정보 표시
+                 if (!code) {
+                     code = this.generateGridCode(lat, lon);
+                 }
+                 if (code) {
+                     this.showGridInfo(code, lat, lon);
+                 }
+             }
+        }
+        
+        // 전역 변수로 격자 시스템 인스턴스 생성
+        let gisGrid;
+        
+                 // 페이지 로드 시 초기화는 아래에서 처리
+        
+                 // 전역 함수들
+         function toggleGrid() {
+             if (gisGrid) {
+                 gisGrid.toggleGrid();
+             }
+         }
+         
+         function clearGrid() {
+             if (gisGrid) {
+                 gisGrid.clearGrid();
+             }
+         }
+         
+         // 검색 탭 전환
+         function switchSearchTab(tab) {
+             const tabs = document.querySelectorAll('.search-tab');
+             const codeSearch = document.getElementById('codeSearch');
+             const coordinateSearch = document.getElementById('coordinateSearch');
+             
+             tabs.forEach(t => t.classList.remove('active'));
+             
+             if (tab === 'code') {
+                 tabs[0].classList.add('active');
+                 codeSearch.style.display = 'block';
+                 coordinateSearch.style.display = 'none';
+             } else {
+                 tabs[1].classList.add('active');
+                 codeSearch.style.display = 'none';
+                 coordinateSearch.style.display = 'block';
+             }
+             
+             // 검색 결과 숨기기
+             document.getElementById('searchResult').style.display = 'none';
+         }
+         
+         // 권역 변경
+         function changeRegion() {
+             const regionSelect = document.getElementById('regionSelect');
+             const selectedRegion = regionSelect.value;
+             
+             if (gisGrid) {
+                 gisGrid.changeSelectedRegion(selectedRegion);
+                 
+                 // 검색 결과 업데이트
+                 const resultDiv = document.getElementById('searchResult');
+                 const resultText = document.getElementById('searchResultText');
+                 
+                 if (resultDiv.style.display !== 'none') {
+                     resultText.innerHTML = `<span style="color: #007cba;">권역이 ${selectedRegion === 'auto' ? '자동 선택' : selectedRegion}으로 변경되었습니다.</span>`;
+                 }
+             }
+         }
+         
+         // 전산화 번호로 검색
+         function searchByCode() {
+             const code = document.getElementById('codeInput').value.trim().toUpperCase();
+             const resultDiv = document.getElementById('searchResult');
+             const resultText = document.getElementById('searchResultText');
+             const regionSelect = document.getElementById('regionSelect');
+             const selectedRegion = regionSelect.value;
+             
+             if (!code) {
+                 resultText.innerHTML = '<span style="color: #dc3545;">전산화 번호를 입력해주세요.</span>';
+                 resultDiv.style.display = 'block';
+                 return;
+             }
+             
+             if (code.length !== 8) {
+                 resultText.innerHTML = '<span style="color: #dc3545;">전산화 번호는 8자리여야 합니다.</span>';
+                 resultDiv.style.display = 'block';
+                 return;
+             }
+             
+             const coordinate = gisGrid.findCoordinateFromCode(code);
+             if (coordinate) {
+                 gisGrid.showSearchResult(coordinate.lat, coordinate.lon, code);
+                 const regionText = selectedRegion === 'auto' ? '자동 선택' : selectedRegion;
+                 resultText.innerHTML = `<span style="color: #28a745;">검색 완료! (${regionText} 권역 사용)<br>위도: ${coordinate.lat.toFixed(6)}, 경도: ${coordinate.lon.toFixed(6)}</span>`;
+                 resultDiv.style.display = 'block';
+             } else {
+                 resultText.innerHTML = '<span style="color: #dc3545;">유효하지 않은 전산화 번호입니다.</span>';
+                 resultDiv.style.display = 'block';
+             }
+         }
+         
+         // 좌표로 검색
+         function searchByCoordinate() {
+             const lat = parseFloat(document.getElementById('latInput').value);
+             const lon = parseFloat(document.getElementById('lonInput').value);
+             const resultDiv = document.getElementById('searchResult');
+             const resultText = document.getElementById('searchResultText');
+             const regionSelect = document.getElementById('regionSelect');
+             const selectedRegion = regionSelect.value;
+             
+             if (isNaN(lat) || isNaN(lon)) {
+                 resultText.innerHTML = '<span style="color: #dc3545;">유효한 좌표를 입력해주세요.</span>';
+                 resultDiv.style.display = 'block';
+                 return;
+             }
+             
+             if (lat < 33 || lat > 39 || lon < 124 || lon > 132) {
+                 resultText.innerHTML = '<span style="color: #dc3545;">한국 영역 내의 좌표를 입력해주세요.</span>';
+                 resultDiv.style.display = 'block';
+                 return;
+             }
+             
+             const code = gisGrid.generateGridCode(lat, lon);
+             if (code) {
+                 gisGrid.showSearchResult(lat, lon, code);
+                 const regionText = selectedRegion === 'auto' ? '자동 선택' : selectedRegion;
+                 resultText.innerHTML = `<span style="color: #28a745;">검색 완료! (${regionText} 권역 사용)<br>전산화 번호: ${code}</span>`;
+                 resultDiv.style.display = 'block';
+             } else {
+                 resultText.innerHTML = '<span style="color: #dc3545;">해당 좌표에서 격자 코드를 생성할 수 없습니다.</span>';
+                 resultDiv.style.display = 'block';
+             }
+         }
+         
+         // Enter 키로 검색
+         document.addEventListener('DOMContentLoaded', () => {
+             document.getElementById('codeInput').addEventListener('keypress', (e) => {
+                 if (e.key === 'Enter') {
+                     searchByCode();
+                 }
+             });
+             
+             document.getElementById('latInput').addEventListener('keypress', (e) => {
+                 if (e.key === 'Enter') {
+                     searchByCoordinate();
+                 }
+             });
+             
+             document.getElementById('lonInput').addEventListener('keypress', (e) => {
+                 if (e.key === 'Enter') {
+                     searchByCoordinate();
+                 }
+             });
+         });
+        
+                 // 지도 이동 시 격자 업데이트 (디바운싱 적용)
+         let updateTimeout;
+         document.addEventListener('DOMContentLoaded', () => {
+             gisGrid = new KoreanGISGrid();
+             
+             // 지도 이동 이벤트 리스너 추가
+             if (gisGrid && gisGrid.map) {
+                 gisGrid.map.on('moveend', function() {
+                     if (gisGrid.isGridVisible) {
+                         clearTimeout(updateTimeout);
+                         updateTimeout = setTimeout(() => {
+                             gisGrid.generateGrid();
+                         }, 300); // 300ms 지연으로 연속 업데이트 방지
+                     }
+                 });
+             }
+         });
+    </script>
+</body>
+</html>
